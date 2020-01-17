@@ -20,6 +20,7 @@ int main(int argc, char **argv) {
     int text_length;
     int number_of_char_per_core, number_of_char_on_last_core;
     int length_of_pattern;
+    int occurrences;
     std::string received_string;
     std::string pattern;
     std::string data_file_name;
@@ -33,21 +34,22 @@ int main(int argc, char **argv) {
     MPI_Status status;
     MPI_Comm_rank(MPI_COMM_WORLD, &process_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &number_of_processes);
-    MPI_Barrier(MPI_COMM_WORLD); /* IMPORTANT */
-    
+    MPI_Barrier(MPI_COMM_WORLD);
+
 
 
     // master instructions
     if(process_rank == MASTER_CORE) {
 
+
         std::string text_data = readTextFile(argv[1]);
         text_length = text_data.length();
-        
+
         pattern = argv[2];
         length_of_pattern = pattern.length();
 
         start = MPI_Wtime();
-        
+
         // decompose data
         findDomainDecomposition(text_length, number_of_processes, &number_of_char_per_core, &number_of_char_on_last_core);
 
@@ -88,6 +90,7 @@ int main(int argc, char **argv) {
         MPI_Recv(buf, count, MPI_CHAR, MASTER_CORE, 0, MPI_COMM_WORLD, &status);
         std::string buf_string(buf, count);
         received_string = buf_string;
+
     }
 
     if(process_rank == MASTER_CORE) {
@@ -115,13 +118,15 @@ int main(int argc, char **argv) {
     int *patPositions = new int[received_string.length() + 1] {};
 
     // run kmp algorithm
-    kmpAlgorithm((char*)received_string.c_str(), (char*)pattern.c_str(), is_ps_strong, patPositions);
+    occurrences = kmpAlgorithm((char*)received_string.c_str(), (char*)pattern.c_str(), is_ps_strong, patPositions);
 
 
     // if this process is not master then send pattern position array to master process
     if(process_rank != MASTER_CORE) {
         MPI_Request request;
         MPI_Isend(patPositions, received_string.length() + 1, MPI_INT, MASTER_CORE, 1, MPI_COMM_WORLD, &request);
+        MPI_Request request2;
+        MPI_Isend(&occurrences, 1, MPI_INT, MASTER_CORE, 3, MPI_COMM_WORLD, &request2);
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -130,12 +135,10 @@ int main(int argc, char **argv) {
         // this process is master
         std::vector<int> indexes;
 
-        // count indexes found in masters chunk of data and push them to index vector
-        int number_of_occurrences {0};
         for (int j = 0; j < received_string.length() + 1; j++) {
             if (patPositions[j] != 0) {
                 indexes.push_back(patPositions[j]);
-                number_of_occurrences++;
+
             } else {
                 break;
             }
@@ -153,20 +156,21 @@ int main(int argc, char **argv) {
             buf = (int*) malloc(count*(sizeof(int) + 1));
             MPI_Recv(buf, count, MPI_INT, i, 1, MPI_COMM_WORLD, &status);
 
+            int occurences_buf;
+            MPI_Recv(&occurences_buf, 1, MPI_INT, i, 3, MPI_COMM_WORLD, &status);
+            occurrences += occurences_buf;
             // rewrite indexes of pattern occurrence from local arrays to global vector
             // with proper offset
             for (int j = 0; j < count; j++) {
                 if(buf[j] != 0) {
                     indexes.push_back(i*count + buf[j] - 1);
-                    number_of_occurrences++;
                 } else {
                     break;
                 }
 
             }
         }
-        // print number of occurrences
-        std::cout << " Number of occurrences: " << number_of_occurrences << std::endl;
+        std::cout << " Number of occurrences: " << occurrences << std::endl;
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -240,10 +244,10 @@ int kmpAlgorithm(char *text, char *pattern, bool isPSStrong, int *patPositions) 
             j = std::max(0, P[j]);
         while (j < patLength && pattern[j] == text[i + j])
             j++;
+        // pattern found
         if (j == patLength) {
             patPositions[occurrences] = i;
             occurrences++;
-
         }
     }
     delete[] P;
