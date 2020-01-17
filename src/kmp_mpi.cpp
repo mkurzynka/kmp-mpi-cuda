@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
     std::string data_file_name;
     std::string pattern_file_name;
 
-    bool is_ps_strong = false;
+    bool is_ps_strong;
     double start, end;
 
     // initialize MPI
@@ -41,13 +41,15 @@ int main(int argc, char **argv) {
     // master instructions
     if(process_rank == MASTER_CORE) {
 
-
+        
         std::string text_data = readTextFile(argv[1]);
         text_length = text_data.length();
 
         pattern = argv[2];
         length_of_pattern = pattern.length();
 
+        is_ps_strong = argv[3];
+        
         start = MPI_Wtime();
 
         // decompose data
