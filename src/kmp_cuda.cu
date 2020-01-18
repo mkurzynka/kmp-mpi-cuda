@@ -100,6 +100,7 @@ int main(int argc, char* argv[]) {
     int *d_P;
     int *d_pat_positions;
 
+    clock_t elapsed_time;
 
     std::ifstream file(argv[1]);
 
@@ -116,6 +117,8 @@ int main(int argc, char* argv[]) {
 
     pattern = argv[2];
     is_kmp = argv[3];
+
+    elapsed_time = clock();
 
     int text_length = strlen(text_data);
     int pattern_length = strlen(pattern);
@@ -140,7 +143,7 @@ int main(int argc, char* argv[]) {
     cudaMemcpy(d_P, P, text_length*sizeof(int), cudaMemcpyHostToDevice);
     cudaMemcpy(d_pat_positions, pat_positions, text_length*sizeof(int), cudaMemcpyHostToDevice);
 
-    float elapsed_time = 0;
+    float elapsed_time_gpu = 0;
     cudaEvent_t start_time, stop_time;
 
     cudaEventCreate(&start_time);
@@ -154,10 +157,10 @@ int main(int argc, char* argv[]) {
  
     cudaEventSynchronize(start_time);    
     cudaEventSynchronize(stop_time);    
-    cudaEventElapsedTime(&elapsed_time, start_time, stop_time);  
+    cudaEventElapsedTime(&elapsed_time_gpu, start_time, stop_time);  
 
 
-    printf("KMP algorithm finished, elapsed time: %f s \n", elapsed_time/1000);  
+    printf("KMP algorithm finished, elapsed time on gpu: %f s \n", elapsed_time_gpu/1000);  
     
     cudaMemcpy(pat_positions, d_pat_positions, text_length*sizeof(int), cudaMemcpyDeviceToHost);
 
@@ -171,7 +174,9 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    printf("Number of occurences: %d\n", occurrences);
+    elapsed_time = clock() - elapsed_time;
+
+    printf("Number of occurences: %d, elapsed time: %f\n", occurrences, ((double) elapsed_time) / CLOCKS_PER_SEC);
 
     cudaFree(d_text_data); 
     cudaFree(d_pattern);
